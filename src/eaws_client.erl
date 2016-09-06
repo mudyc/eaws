@@ -1,7 +1,7 @@
 -module(eaws_client).
 -behaviour(gen_server).
 
--include("include/eaws.hrl").
+-include("eaws.hrl").
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -export([connect/0,
@@ -60,7 +60,6 @@ send_formatted_email(Params) ->
                            subject   = proplists:get_value(subject, Params),
                            text_body = proplists:get_value(text_body, Params),
                            html_body = proplists:get_value(html_body, Params)},
-
     gen_server:cast(?MODULE, {send_formatted_email, Ses_Email}).
 
 send_raw_email(Params) ->

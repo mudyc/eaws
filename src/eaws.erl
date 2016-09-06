@@ -1,5 +1,5 @@
 -module(eaws).
--include("include/eaws.hrl").
+-include("eaws.hrl").
 
 -compile(export_all).
 

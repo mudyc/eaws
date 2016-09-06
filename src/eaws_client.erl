@@ -5,11 +5,11 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -export([connect/0,
-         connect/2,
+         connect/3,
          send_formatted_email/1,
          send_raw_email/1]).
 
--record(state, {access_key_id, secret_access_key}).
+-record(state, {access_key_id, secret_access_key, host}).
 
 escape_uri(S) when is_list(S) -> escape_uri(unicode:characters_to_binary(S));
 escape_uri(<<C:8, Cs/binary>>) when C >= $a, C =< $z -> [C] ++ escape_uri(Cs);
@@ -30,7 +30,7 @@ calculate_signature(Access_Key_Id, Secret_Access_Key) ->
     Day_Name = httpd_util:day(calendar:day_of_the_week(Today)),
     Month_Name = httpd_util:month(Month),
     Date_String = lists:flatten(io_lib:format("~s, ~p ~s ~p ~2.10.0B:~2.10.0B:~2.10.0B +0000", [Day_Name, Day, Month_Name, Year, Hour, Minute, Second])),
-    Signature = binary_to_list(base64:encode(crypto:sha_mac(list_to_binary(Secret_Access_Key), list_to_binary(Date_String)))),
+    Signature = binary_to_list(base64:encode(crypto:hmac(sha, list_to_binary(Secret_Access_Key), list_to_binary(Date_String)))),
     {Date_String, lists:flatten(io_lib:format("AWS3-HTTPS AWSAccessKeyId=~s, Algorithm=HMACSHA1, Signature=~s", [Access_Key_Id, Signature]))}.
 
 connect() -> 
@@ -42,12 +42,17 @@ connect() ->
                             undefined -> "MISSING_SECRET_ACCESS_KEY";
                             {ok, V2}  -> V2
                         end,
-    connect(Access_Key_Id, Secret_Access_Key).
+    Host              = case application:get_env(eaws, ses_api_host) of
+                            undefined -> "MISSING_SES_API_HOST";
+                            {ok, V3}  -> V3
+                        end,
+    connect(Access_Key_Id, Secret_Access_Key, Host).
 
-connect(Access_Key_Id, Secret_Access_Key) -> 
+connect(Access_Key_Id, Secret_Access_Key, Host) -> 
     gen_server:start_link({local, ?MODULE}, ?MODULE, 
                         [{access_key_id,     Access_Key_Id}, 
-                         {secret_access_key, Secret_Access_Key}], []).
+                         {secret_access_key, Secret_Access_Key},
+                         {host, Host}], []).
 
 send_formatted_email(Params) ->
     Ses_Email = #ses_email{from      = proplists:get_value(from_address, Params),
@@ -74,14 +79,15 @@ init(Args) ->
     crypto:start(),
 
     {ok, #state{access_key_id     = proplists:get_value(access_key_id, Args),
-                secret_access_key = proplists:get_value(secret_access_key, Args)}}.
+                secret_access_key = proplists:get_value(secret_access_key, Args),
+                host              = proplists:get_value(host, Args)}}.
 
 
 handle_call(Request, _From, State) -> {stop, {unknown_call, Request}, State}.
 
 handle_cast({send_formatted_email, Ses_Email}, State) ->
     {Date, Signature} = calculate_signature(State#state.access_key_id, State#state.secret_access_key),
-    Host = "email.us-east-1.amazonaws.com",
+    Host = State#state.host, % "email.us-east-1.amazonaws.com",
 
     io:format("Signature = ~p\n", [Signature]),
     Params = lists:append([{"Action",                 "SendEmail"}, 
@@ -108,7 +114,7 @@ handle_cast({send_formatted_email, Ses_Email}, State) ->
 
 handle_cast({send_raw_email, Ses_Email}, State) ->
     {Date, Signature} = calculate_signature(State#state.access_key_id, State#state.secret_access_key),
-    Host = "email.us-east-1.amazonaws.com",
+    Host = State#state.host, % "email.us-east-1.amazonaws.com",
     Part_Separator = "_003_97DCB304C5294779BEBCFC8357FCC4D2",
 
     Message_Text = string:join([

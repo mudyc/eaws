@@ -93,7 +93,7 @@ handle_cast({send_formatted_email, Ses_Email}, State) ->
                            {"Source",                 Ses_Email#ses_email.from},
                            {"Message.Subject.Data",   Ses_Email#ses_email.subject},
                            {"Message.Body.Text.Data", Ses_Email#ses_email.text_body},
-                           {"Message.Body.Text.Html", Ses_Email#ses_email.html_body}],
+                           {"Message.Body.Html.Data", Ses_Email#ses_email.html_body}],
                          lists:foldl(fun(To, B) -> B ++ [{"Destination.ToAddresses.member." ++ integer_to_list(length(B) + 1), To}] end, [], Ses_Email#ses_email.to)),
 
     % Remove any undefined params and build the body
